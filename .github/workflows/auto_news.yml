@@ -2,19 +2,22 @@ name: Daily News Webhook
 
 on:
   schedule:
-    - cron: '0 23 * * *'  # 한국 오전 8시
-    - cron: '0 7 * * *'   # 한국 오후 4시
-  workflow_dispatch:      # 수동 실행 버튼
+    # 한국 오전 8시(UTC 23시), 오후 4시(UTC 7시)
+    - cron: '0 23 * * *'
+    - cron: '0 7 * * *'
+  workflow_dispatch: # 수동 실행 버튼
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4 # Node.js 24 대응 버전
+        # v3 대신 v4를 사용하여 Node.js 24 환경에 대응합니다.
+        uses: actions/checkout@v4 
 
       - name: Set up Python
-        uses: actions/setup-python@v5 # Node.js 24 대응 버전
+        # v4 대신 v5를 사용하여 최신 실행 환경을 지원합니다.
+        uses: actions/setup-python@v5 
         with:
           python-version: '3.9'
 
@@ -23,7 +26,7 @@ jobs:
 
       - name: Run script
         env:
-          # 여기서 ${{ secrets.이름 }} 형식이 정확해야 합니다.
+          # GitHub Secrets에 등록하신 이름과 일치하는지 꼭 확인하세요!
           DISCORD_WEBHOOK_1: ${{ secrets.DISCORD_WEBHOOK_1 }}
           DISCORD_WEBHOOK_2: ${{ secrets.DISCORD_WEBHOOK_2 }}
         run: python main.py
