@@ -27,6 +27,5 @@ jobs:
       - name: Run script
         env:
           # 깃허브 Secrets에 등록한 이름과 똑같아야 합니다.
-          DISCORD_WEBHOOK_1: ${{ DISCORDJI }}
-
+          DISCORD_WEBHOOK_1: ${{DISCORDJI}}
         run: python main.py
