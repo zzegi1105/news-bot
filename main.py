@@ -4,8 +4,8 @@ from datetime import datetime
 
 # ⚠️ 웹후크 URL을 리스트 안에 여러 개 넣을 수 있습니다.
 DISCORD_WEBHOOK_URLS = [
-    "https://discord.com/api/webhooks/1483277102722580573/T6uLGy7gFw2L3VtWr351ZtTZXnWdXrfql7fY6gs0uys-Jvlf2wOi0v54Cz86-cm-_rDr",
-    "https://discord.com/api/webhooks/1472278491708788750/nzvVSQB9WbS9Cch20RGKC0wlHZfDib-Ldb8i_l-C74RwVl3p2sxd7f8AVzfU_Uq0kvsk"
+    "DISCORD",
+    "ISCORDKIM"
 ]
 
 def fetch_news(mode):
