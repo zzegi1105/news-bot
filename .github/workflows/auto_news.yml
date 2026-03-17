@@ -1,0 +1,27 @@
+name: Daily News Webhook
+
+on:
+  schedule:
+    # 💡 UTC 시간 기준이므로 한국 시간보다 9시간 느립니다.
+    # 한국 오전 8시 = UTC 23:00 (전날) / 한국 오후 4시 = UTC 07:00
+    - cron: '0 23 * * *'  # 오전 8시 알림
+    - cron: '0 7 * * *'   # 오후 4시 알림
+  workflow_dispatch: # 수동 실행 버튼 추가
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run script
+        run: python main.py
