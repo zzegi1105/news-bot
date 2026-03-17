@@ -14,10 +14,10 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4 # 👈 v3에서 v4로 확실히 변경됨
+        uses: actions/checkout@v6 # 👈 v4에서 v6로 변경 (Node 24 지원)
 
       - name: Set up Python
-        uses: actions/setup-python@v5 # 👈 v4에서 v5로 확실히 변경됨
+        uses: actions/setup-python@v6 # 👈 v5에서 v6로 변경 (Node 24 지원)
         with:
           python-version: '3.9'
 
