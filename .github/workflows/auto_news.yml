@@ -2,6 +2,7 @@ name: Daily News Webhook
 
 on:
   schedule:
+    # 한국 오전 8시(UTC 23시), 오후 4시(UTC 7시)
     - cron: '0 23 * * *'
     - cron: '0 7 * * *'
   workflow_dispatch:
@@ -11,11 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        # 최신 Node.js를 지원하는 v4로 업데이트
+        # v3에서 v4로 업데이트 (Node.js 24 지원)
         uses: actions/checkout@v4 
 
       - name: Set up Python
-        # 최신 Node.js를 지원하는 v5로 업데이트
+        # v4에서 v5로 업데이트 (Node.js 24 지원)
         uses: actions/setup-python@v5 
         with:
           python-version: '3.9'
@@ -25,6 +26,7 @@ jobs:
 
       - name: Run script
         env:
+          # 깃허브 Secrets에 등록한 이름과 똑같아야 합니다.
           DISCORD_WEBHOOK_1: ${{ secrets.DISCORD_WEBHOOK_1 }}
           DISCORD_WEBHOOK_2: ${{ secrets.DISCORD_WEBHOOK_2 }}
         run: python main.py
