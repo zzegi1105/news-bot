@@ -24,8 +24,7 @@ jobs:
 
       - name: Run script
         env:
-          # 💡 아래 부분을 정확히 확인하세요. secrets. 뒤에는 
-          # 사용자님이 GitHub Settings에서 만든 Secret 이름과 '정확히' 일치해야 합니다.
+          # 💡 반드시 GitHub Secrets에 등록한 이름과 대소문자까지 똑같아야 합니다.
           DISCORD_WEBHOOK_1: ${{ secrets.DISCORD_WEBHOOK_1 }}
           DISCORD_WEBHOOK_2: ${{ secrets.DISCORD_WEBHOOK_2 }}
         run: python main.py
