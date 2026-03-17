@@ -4,8 +4,7 @@ from datetime import datetime
 
 # 💡 실제 주소 대신 '금고 열쇠'를 꺼내오도록 수정
 DISCORD_WEBHOOK_URLS = [
-    os.getenv("DISCORDJI"),
-    os.getenv("")
+    os.getenv("DISCORDJI")
 ]
 
 def fetch_news(mode):
