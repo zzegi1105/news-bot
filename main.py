@@ -5,7 +5,7 @@ from datetime import datetime
 # ⚠️ 웹후크 URL을 리스트 안에 여러 개 넣을 수 있습니다.
 DISCORD_WEBHOOK_URLS = [
     "DISCORD",
-    "ISCORDKIM"
+    "DISCORDKIM"
 ]
 
 def fetch_news(mode):
