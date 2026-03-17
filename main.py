@@ -2,10 +2,10 @@ import requests
 import re
 from datetime import datetime
 
-# ⚠️ 웹후크 URL을 리스트 안에 여러 개 넣을 수 있습니다.
+# 💡 실제 주소 대신 '금고 열쇠'를 꺼내오도록 수정
 DISCORD_WEBHOOK_URLS = [
-    "DISCORDJI",
-    ""
+    os.getenv("DISCORDJI"),
+    os.getenv("")
 ]
 
 def fetch_news(mode):
