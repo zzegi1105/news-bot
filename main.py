@@ -15,7 +15,7 @@ now_kst = get_kst_now()
 DISCORD_WEBHOOK_1 = os.getenv("DISCORD_WEBHOOK_1")
 
 def fetch_news(mode, limit=15):
-    """뉴스 수집 및 링크 추출 로직"""
+    """뉴스 수집 및 링크 필터링 로직"""
     if mode == "WORLD":
         query = "세계+경제+OR+미국+CPI+OR+연준+금리+OR+뉴욕증시+OR+국제유가+OR+환율"
         title_prefix = f"🌍 **[{now_kst.strftime('%m/%d %H:%M')}] 세계거시경제 TOP 10**"
@@ -42,11 +42,17 @@ def fetch_news(mode, limit=15):
                 title = title_match.group(1).replace("<![CDATA[", "").replace("]]>", "").split(" - ")[0].strip()
                 link = link_match.group(1) if link_match else None
                 
-                # 링크가 존재할 경우에만 수집
+                # [기능 복구] 미리보기 및 불필요한 파라미터가 있는 링크 제외
+                has_preview = link and (
+                    "?hl=ko&gl=KR&ceid=KR:ko" in link
+                    or "preview" in link
+                    or "amp;" in link
+                )
+
                 if len(title) > 3:
                     collected_news.append({
                         "title": title,
-                        "link": link
+                        "link": link if link and not has_preview else None,
                     })
             if len(collected_news) >= limit: break
         return collected_news, title_prefix
@@ -55,90 +61,6 @@ def fetch_news(mode, limit=15):
         return [], ""
 
 def filter_news(news_list):
-    """기존 필터링 로직 유지"""
-    noise_words = ["?", "카더라", "일까", "조짐", "추측", "특징주", "급등주"]
-    signal_words = ["발표", "확정", "지표", "미국", "국제", "금리", "상승", "하락", "실적"]
-    
-    filtered = []
-    for item in news_list:
-        title = item["title"]
-        if len(title) < 10: continue
-        if any(w in title for w in signal_words) or not any(w in title for w in noise_words):
-            filtered.append(item)
-        if len(filtered) >= 10: break
-    return filtered
-
-def send_to_discord(articles, title_prefix, webhook_url=None):
-    """[링크 복구] Markdown 형식을 사용하여 제목에 링크 연결"""
-    if not articles:
-        print("📭 전송할 뉴스가 없습니다.")
-        return
-
-    targets = []
-    if webhook_url and webhook_url.strip():
-        targets = [webhook_url]
-    elif DISCORD_WEBHOOK_1:
-        targets = [DISCORD_WEBHOOK_1]
-
-    if not targets:
-        print("❌ Discord Webhook URL이 설정되지 않았습니다.")
-        return
-
-    # 메시지 생성 (Markdown 링크 적용)
-    current_message = f"{title_prefix}\n\n"
-    messages = []
-    
-    for i, article in enumerate(articles, 1):
-        title = article["title"]
-        link = article.get("link")
-
-        # 링크가 있으면 [제목](링크) 형식으로 생성, 없으면 제목만 생성
-        if link:
-            line = f"{i}. [{title}]({link})\n\n"
-        else:
-            line = f"{i}. {title}\n\n"
-
-        if len((current_message + line).encode("utf-8")) > 1800:
-            messages.append(current_message)
-            current_message = f"{title_prefix}\n\n{line}"
-        else:
-            current_message += line
-
-    if current_message.strip():
-        messages.append(current_message)
-
-    # 전송 루프
-    for target in targets:
-        try:
-            for msg in messages:
-                requests.post(target, json={"content": msg}, timeout=10)
-            print(f"✅ 전송 완료: {target[:30]}...")
-        except Exception as e:
-            print(f"❌ 전송 실패: {e}")
-
-def main():
-    print(f"🚀 뉴스봇 시작 (KST: {now_kst.strftime('%H:%M')})")
-    current_hour = now_kst.hour
-
-    # 1. 07시 정기 알림
-    if current_hour == 7:
-        world_news, world_pref = fetch_news("WORLD")
-        dom_news, dom_pref = fetch_news("DOMESTIC")
-        
-        if DISCORD_WEBHOOK_1:
-            send_to_discord(filter_news(world_news), world_pref, DISCORD_WEBHOOK_1)
-            send_to_discord(filter_news(dom_news), dom_pref, DISCORD_WEBHOOK_1)
-        return
-
-    # 2. 수동 실행 및 GitHub Actions 대응
-    if os.getenv("FORCE_RUN") == "true" or os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("GITHUB_RUN_ID"):
-        world_news, world_pref = fetch_news("WORLD")
-        dom_news, dom_pref = fetch_news("DOMESTIC")
-        send_to_discord(filter_news(world_news), world_pref)
-        send_to_discord(filter_news(dom_news), dom_pref)
-        return
-
-    print(f"⏭️ 실행 조건 아님 (현재 {current_hour}시)")
-
-if __name__ == "__main__":
-    main()
+    """지표 중심 필터링 (기존 로직 유지)"""
+    noise_words = ["?", "카더라", "일까", "조짐", "추측", "특징주", "급등주", "테마주"]
+    signal_words = ["발표", "확정", "지표", "미국", "국제", "금리", "상승", "하락", "실적", "공
