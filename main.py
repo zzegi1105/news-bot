@@ -11,7 +11,7 @@ def get_kst_now():
 
 now_kst = get_kst_now()
 
-# 2. 환경 변수 (WEBHOOK_2 관련 완전 제거)
+# 2. 환경 변수 (WEBHOOK_2는 완전히 제거됨)
 DISCORD_WEBHOOK_1 = os.getenv("DISCORD_WEBHOOK_1")
 
 def fetch_news(mode, limit=15):
@@ -42,25 +42,39 @@ def fetch_news(mode, limit=15):
                 title = title_match.group(1).replace("<![CDATA[", "").replace("]]>", "").split(" - ")[0].strip()
                 link = link_match.group(1) if link_match else None
                 
-                # [기능 복구] 미리보기 및 불필요한 파라미터가 있는 링크 제외
-                has_preview = link and (
-                    "?hl=ko&gl=KR&ceid=KR:ko" in link
-                    or "preview" in link
-                    or "amp;" in link
-                )
+                # [필터링] 미리보기 및 불필요한 파라미터 제거
+                is_invalid = link and any(p in link for p in ["?hl=ko", "preview", "amp;"])
 
                 if len(title) > 3:
                     collected_news.append({
                         "title": title,
-                        "link": link if link and not has_preview else None,
+                        "link": link if link and not is_invalid else None,
                     })
             if len(collected_news) >= limit: break
         return collected_news, title_prefix
     except Exception as e:
-        print(f"❌ 뉴스 파싱 오류: {e}")
+        print(f"❌ 뉴스 파싱 오류 ({mode}): {e}")
         return [], ""
 
 def filter_news(news_list):
-    """지표 중심 필터링 (기존 로직 유지)"""
-    noise_words = ["?", "카더라", "일까", "조짐", "추측", "특징주", "급등주", "테마주"]
-    signal_words = ["발표", "확정", "지표", "미국", "국제", "금리", "상승", "하락", "실적", "공
+    """지표 중심 필터링"""
+    noise_words = ["?", "카더라", "일까", "조짐", "추측", "특징주", "급등주"]
+    signal_words = ["발표", "확정", "지표", "미국", "국제", "금리", "상승", "하락", "실적"]
+    
+    filtered = []
+    for item in news_list:
+        title = item["title"]
+        if len(title) < 8: continue
+        
+        has_noise = any(word in title for word in noise_words)
+        has_signal = any(word in title for word in signal_words)
+
+        if has_signal or not has_noise:
+            filtered.append(item)
+        if len(filtered) >= 10: break
+    return filtered
+
+def send_to_discord(articles, title_prefix, webhook_url=None):
+    """안정적인 메시지 분할 전송 로직"""
+    if not articles:
+        print("📭 전송할 뉴스가 없습니다.")
