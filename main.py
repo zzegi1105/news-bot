@@ -14,6 +14,7 @@ def get_kst_now():
 
 now_kst = get_kst_now()
 
+# 환경변수 로드
 DISCORD_WEBHOOK_1 = os.getenv("DISCORD_WEBHOOK_1")
 
 
@@ -22,7 +23,7 @@ def fetch_news(mode, limit=15):
     if mode == "WORLD":
         query = "세계+경제+OR+미국+CPI+OR+연준+금리+OR+뉴욕증시+OR+국제유가+OR+환율"
         title_prefix = f"🌍 **[{now_kst.strftime('%m/%d %H:%M')}] 세계거시경제 TOP 10**"
-    else:  # DOMESTIC (국내거시경제 범위 확장)
+    else:  # DOMESTIC
         query = (
             "한국+경제+OR+韩國+经济"
             "+OR+한국은행+OR+BOK+한은"
@@ -38,6 +39,7 @@ def fetch_news(mode, limit=15):
     rss_url = f"https://news.google.com/rss/search?q={query}&hl=ko&gl=KR&ceid=KR:ko"
 
     try:
+        print(f"📡 {mode} 뉴스 RSS 요청: {rss_url[:80]}...")
         response = requests.get(rss_url, timeout=15)
         response.raise_for_status()
         xml_text = response.text
@@ -55,9 +57,7 @@ def fetch_news(mode, limit=15):
                     title = title.split(" - ", 1)[0]
                 title = title.strip()
 
-                # 기사 링크
                 link = link_match.group(1) if link_match else None
-                # 미리보기/불필요한 파라미터가 있는 링크는 제외
                 has_preview = link and (
                     "?hl=ko&gl=KR&ceid=KR:ko" in link
                     or "preview" in link
@@ -73,6 +73,7 @@ def fetch_news(mode, limit=15):
             if len(collected_news) >= limit:
                 break
 
+        print(f"✅ {mode} 뉴스 수집: {len(collected_news)}개")
         return collected_news, title_prefix
     except Exception as e:
         print(f"❌ 뉴스 파싱 오류 ({mode}): {e}")
@@ -87,7 +88,7 @@ def get_core_keywords(text):
 
 
 def is_duplicate_issue(new_title, seen_keyword_sets):
-    """중복 체크 (3개 이상 공통 키워드면 제외)"""
+    """중복 체크"""
     new_keywords = get_core_keywords(new_title)
     if len(new_keywords) < 2:
         return True
@@ -98,20 +99,13 @@ def is_duplicate_issue(new_title, seen_keyword_sets):
             return True
         if len(new_keywords) <= 4 and len(common) >= 2:
             return True
-
     return False
 
 
 def filter_news(news_list):
     """특징주 제거 포함 필터링"""
-    noise_words = [
-        "?", "카더라", "일까", "조짐", "추측", "포착", "전망은",
-        "특징주", "급등주", "테마주", "상한가주", "떡상주",
-    ]
-    signal_words = [
-        "발표", "확정", "지표", "미국", "국제", "달러", "금리",
-        "상승", "하락", "공시", "체결", "실적", "FOMC", "CPI",
-    ]
+    noise_words = ["?", "카더라", "일까", "조짐", "추측", "포착", "전망은", "특징주", "급등주", "테마주", "상한가주", "떡상주"]
+    signal_words = ["발표", "확정", "지표", "미국", "국제", "달러", "금리", "상승", "하락", "공시", "체결", "실적", "FOMC", "CPI"]
 
     filtered = []
     seen_keyword_sets = []
@@ -131,27 +125,29 @@ def filter_news(news_list):
         if len(filtered) >= 10:
             break
 
+    print(f"✅ 필터링 후: {len(filtered)}개")
     return filtered
 
 
 def send_to_discord(articles, title_prefix, webhook_url=None):
-    """Discord 전송: Markdown 링크로 기사 링크 연동 (미리보기 제외)"""
+    """Discord 전송"""
     if not articles:
         print("📭 전송할 뉴스가 없습니다.")
         return
 
-    # 타겟 webhook 결정 (DISCORD_WEBHOOK_2 완전 제거)
+    # 타겟 webhook 결정
     targets = []
     if webhook_url and webhook_url.strip():
         targets = [webhook_url]
     elif DISCORD_WEBHOOK_1:
         targets = [DISCORD_WEBHOOK_1]
-
-    if not targets:
-        print("❌ Discord Webhook URL이 설정되지 않았습니다.")
+    else:
+        print("❌ DISCORD_WEBHOOK_1 환경변수 누락")
         return
 
-    # 메시지 분할 (Markdown 링크 포함)
+    print(f"📤 Discord 전송 대상: {len(targets)}개 webhook")
+
+    # 메시지 분할 (수정: 백슬래시 제거)
     current_message = f"{title_prefix}\n\n"
     messages = []
 
@@ -174,29 +170,78 @@ def send_to_discord(articles, title_prefix, webhook_url=None):
     if current_message.strip():
         messages.append(current_message)
 
+    print(f"📤 분할 메시지: {len(messages)}개")
+
     # 전송
     for webhook_url in targets:
         success_count = 0
+        print(f"🔗 Webhook 테스트: {webhook_url[:40]}...")
+        
         try:
-            for msg in messages:
+            for idx, msg in enumerate(messages, 1):
+                print(f"📤 메시지 {idx}/{len(messages)} 전송 시도...")
                 response = requests.post(
                     webhook_url,
                     json={"content": msg},
                     timeout=10,
                     headers={"User-Agent": "NewsBot/1.0"},
                 )
+                print(f"   HTTP {response.status_code}: {response.text[:100]}")
+                
                 if response.status_code in [200, 204]:
                     success_count += 1
                 else:
-                    print(f"⚠️ HTTP {response.status_code}: {response.text[:100]}")
-            print(f"✅ Discord 전송 완료 ({success_count}/{len(messages)}): {webhook_url[:30]}...")
+                    print(f"⚠️ 전송 실패: {response.status_code}")
+            
+            print(f"✅ Discord 전송 완료 ({success_count}/{len(messages)})")
         except Exception as e:
-            print(f"❌ 전송 실패: {webhook_url[:30]}... {str(e)[:100]}")
+            print(f"❌ 전송 예외 발생: {str(e)[:100]}")
 
 
 def main():
     """메인 실행 로직"""
     print(f"🚀 [{now_kst.strftime('%Y-%m-%d %H:%M:%S KST')}] 뉴스봇 시작")
+    print(f"🔍 DISCORD_WEBHOOK_1: {'설정됨' if DISCORD_WEBHOOK_1 else '누락됨'}")
+    if DISCORD_WEBHOOK_1:
+        print(f"🔍 Webhook 길이: {len(DISCORD_WEBHOOK_1)}자")
+    
     current_hour = now_kst.hour
+    print(f"🕐 현재 시간: {current_hour}시")
 
-    #
+    # 1. 오전 7시 정기알림
+    if current_hour == 7:
+        print("🕐 [정기알림] 오전 7시 KST")
+        world_news, world_prefix = fetch_news("WORLD")
+        domestic_news, domestic_prefix = fetch_news("DOMESTIC")
+
+        world_filtered = filter_news(world_news)
+        domestic_filtered = filter_news(domestic_news)
+
+        print(f"🌍 세계뉴스: {len(world_filtered)}개, 🇰🇷 국내뉴스: {len(domestic_filtered)}개")
+
+        if DISCORD_WEBHOOK_1:
+            send_to_discord(world_filtered, world_prefix, DISCORD_WEBHOOK_1)
+            send_to_discord(domestic_filtered, domestic_prefix, DISCORD_WEBHOOK_1)
+        return
+
+    # 2. GitHub Actions 수동 실행
+    if os.getenv("FORCE_RUN") == "true" or os.getenv("GITHUB_RUN_ID"):
+        print("🔥 [GitHub Actions] 수동실행 모드")
+        world_news, world_prefix = fetch_news("WORLD")
+        domestic_news, domestic_prefix = fetch_news("DOMESTIC")
+
+        world_filtered = filter_news(world_news)
+        domestic_filtered = filter_news(domestic_news)
+
+        print(f"🌍 세계뉴스: {len(world_filtered)}개, 🇰🇷 국내뉴스: {len(domestic_filtered)}개")
+
+        send_to_discord(world_filtered, world_prefix)
+        send_to_discord(domestic_filtered, domestic_prefix)
+        return
+
+    print(f"⏭️ 실행시간 아님 ({current_hour}시) - 매일 07:00에 자동실행")
+    return
+
+
+if __name__ == "__main__":
+    main()
