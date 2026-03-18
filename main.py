@@ -39,4 +39,4 @@ def fetch_domestic_news():
             title_match = re.search(r'<title>(.*?)</title>', item)
             link_match = re.search(r'<link>(.*?)</link>', item)
             if title_match and link_match:
-                title
+            title
