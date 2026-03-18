@@ -5,7 +5,7 @@ from datetime import datetime
 
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_1")
 
-def fetch_news(query, category, limit=250):
+def fetch_news(query, category, limit=150):
     """뉴스 수집 - 확실히 많이"""
     rss_url = f"https://news.google.com/rss/search?q={query}&hl=ko&gl=KR&ceid=KR:ko"
     try:
