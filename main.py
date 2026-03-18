@@ -15,7 +15,7 @@ def get_kst_now():
 now_kst = get_kst_now()
 
 DISCORD_WEBHOOK_1 = os.getenv("DISCORD_WEBHOOK_1")
-DISCORD_WEBHOOK_2 = os.getenv("DISCORD_WEBHOOK_2")
+
 
 
 def fetch_news(mode, limit=15):
