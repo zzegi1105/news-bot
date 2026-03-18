@@ -16,7 +16,6 @@ return kst_now
 now_kst = get_kst_now()
 
 DISCORD_WEBHOOK_1 = os.getenv("DISCORD_WEBHOOK_1")
-DISCORD_WEBHOOK_2 = os.getenv("DISCORD_WEBHOOK_2")
 
 
 def fetch_news(mode, limit=15):
@@ -171,8 +170,6 @@ targets = [webhook_url]
 else:
 if DISCORD_WEBHOOK_1:
 targets.append(DISCORD_WEBHOOK_1)
-if DISCORD_WEBHOOK_2:
-targets.append(DISCORD_WEBHOOK_2)
 
 if not targets:
 print("❌ Discord Webhook URL이 설정되지 않았습니다.")
