@@ -1,7 +1,7 @@
 import os
 import requests
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 KST = timezone(timedelta(hours=9))
 
