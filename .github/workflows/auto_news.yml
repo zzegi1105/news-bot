@@ -1,31 +1,31 @@
-name: Daily News Webhook
+name: 글로벌 매크로 뉴스 알림 (오전 8시)
 
 on:
   schedule:
-    - cron: '0 23 * * *'
-    - cron: '0 7 * * *'
-  workflow_dispatch:
+    # KST 오전 8시 = UTC 전날 23시 (월~금)
+    - cron: '0 23 * * 1-5'
+  workflow_dispatch:  # 수동 실행 버튼
 
 jobs:
-  build:
+  send-news:
     runs-on: ubuntu-latest
-    env:
-      # Node.js 24를 강제로 사용하도록 설정
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6 # 👈 v4에서 v6로 변경 (Node 24 지원)
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v6 # 👈 v5에서 v6로 변경 (Node 24 지원)
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
 
-      - name: Run script
+      - name: Run morning macro news
         env:
           DISCORD_WEBHOOK_1: ${{ secrets.DISCORD_WEBHOOK_1 }}
           DISCORD_WEBHOOK_2: ${{ secrets.DISCORD_WEBHOOK_2 }}
-        run: python main.py
+        run: |
+          python news.py
