@@ -141,7 +141,7 @@ def filter_news(news_list):
 
     for item in news_list:
         title = item["title"]
-        if len(title) < 10:
+        if len(title) =< 10:
             continue
 
         has_noise = any(word in title for word in noise_words)
