@@ -3,89 +3,100 @@ import requests
 import re
 from datetime import datetime
 
+# 설정 확인
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_1")
+print(f"🚀 뉴스봇 시작: {datetime.now().strftime('%Y-%m-%d %H:%M:%S KST')}")
+print(f"🔗 웹후크: {'✅' if DISCORD_WEBHOOK_URL else '❌'}")
 
-def fetch_macro_news():
-    """🌍 글로벌 거시경제 뉴스"""
-    query = "뉴욕증시+OR+국제유가+OR+환율+OR+미국+CPI+OR+연준+금리+OR+도트플롯+OR+국채수익률+OR+빅테크"
+def fetch_news(query, news_type, max_items=100):
+    """뉴스 RSS 수집"""
     rss_url = f"https://news.google.com/rss/search?q={query}&hl=ko&gl=KR&ceid=KR:ko"
     try:
-        response = requests.get(rss_url, timeout=15)
-        items = re.findall(r'<item>(.*?)</item>', response.text, re.DOTALL)
+        resp = requests.get(rss_url, timeout=15)
+        items = re.findall(r'<item>(.*?)</item>', resp.text, re.DOTALL)
         news = []
-        for item in items[:120]:
-            title_match = re.search(r'<title>(.*?)</title>', item)
+        for item in items[:max_items]:
+            title_match = re.search(r'<title>(.*?)</title>', item, re.DOTALL)
             link_match = re.search(r'<link>(.*?)</link>', item)
             if title_match and link_match:
-                title = title_match.group(1).replace("<![CDATA[", "").replace("]]>", "").split(" - ")[0]
-                news.append({"title": title, "link": link_match.group(1), "type": "🌍 글로벌"})
-        print(f"✅ 글로벌 거시 {len(news)}개")
+                title = title_match.group(1).replace("<![CDATA[", "").replace("]]>", "").split(" - ")[0].strip()
+                link = link_match.group(1)
+                news.append({"title": title, "link": link, "type": news_type})
+        print(f"✅ {news_type}: {len(news)}개 수집")
         return news
-    except:
+    except Exception as e:
+        print(f"❌ {news_type} 오류: {e}")
         return []
 
-def fetch_domestic_macro_news():
-    """📈 국내 거시경제 뉴스 (금융정책, 환율, 금리, 주가지수 등)"""
-    # 거시경제적 관점의 국내 뉴스만
-    query = "한국은행+OR+금리+OR+환율+OR+코스피+OR+코스닥+OR+원화+OR+채권+OR+국고채+OR+소비자물가+OR+생산자물가+OR+수출입+OR+경상수지+OR+무역수지"
-    rss_url = f"https://news.google.com/rss/search?q={query}&hl=ko&gl=KR&ceid=KR:ko"
-    try:
-        response = requests.get(rss_url, timeout=15)
-        items = re.findall(r'<item>(.*?)</item>', response.text, re.DOTALL)
-        news = []
-        for item in items[:120]:
-            title_match = re.search(r'<title>(.*?)</title>', item)
-            link_match = re.search(r'<link>(.*?)</link>', item)
-            if title_match and link_match:
-                title = title_match.group(1).replace("<![CDATA[", "").replace("]]>", "").split(" - ")[0]
-                # 기업 공시/개별 종목 뉴스 제외
-                if all(x not in title for x in ["공시", "수주", "실적", "특징주", "계약"]):
-                    news.append({"title": title, "link": link_match.group(1), "type": "📈 국내거시"})
-        print(f"✅ 국내 거시 {len(news)}개")
-        return news
-    except:
-        return []
-
-def simple_filter(news_list, max_count=10):
-    """상위 N개 선정"""
+def filter_news(news_list, max_count=10):
+    """중복/노이즈 제거 + 상위 N개 선정"""
+    noise_words = ["카더라", "일까", "조짐", "추측", "전망", "?"]
     filtered = []
-    seen_titles = set()
+    seen_keywords = []
+    
     for item in news_list:
-        if item['title'] not in seen_titles and len(filtered) < max_count:
+        title = item['title']
+        # 노이즈 제거
+        if any(noise in title for noise in noise_words):
+            continue
+        # 중복 제거 (키워드 3개 이상 겹치면 제외)
+        keywords = re.findall(r'[가-힣a-zA-Z0-9]{2,}', title)
+        keywords = [w for w in keywords if w not in ['오늘', '내일', '뉴스', '속보']]
+        
+        is_duplicate = False
+        for existing in seen_keywords:
+            common = set(keywords) & set(existing)
+            if len(common) >= 3:
+                is_duplicate = True
+                break
+        if not is_duplicate and len(filtered) < max_count:
             filtered.append(item)
-            seen_titles.add(item['title'])
+            seen_keywords.append(keywords)
+    
     return filtered
 
-def send_to_discord(articles):
+def send_discord(articles):
+    """디스코드 전송"""
     if not articles or not DISCORD_WEBHOOK_URL:
-        print("❌ 전송 불가")
+        print("❌ 전송 불가: 뉴스없음 또는 웹후크없음")
         return
     
-    title = f"📰 **[{datetime.now().strftime('%m/%d %H:%M')}] 거시경제 시그널 TOP {len(articles)}**"
-    msg = f"{title}\n\n"
+    # 제목
+    title = f"📰 **[{datetime.now().strftime('%m/%d %H:%M')}] 거시경제 TOP {len(articles)}**"
+    message = f"{title}\n\n"
     
+    # 뉴스 목록
     for i, article in enumerate(articles, 1):
-        msg += f"{i}. **{article['title']}** {article['type']}\n🔗 [기사보기](<{article['link']}>)\n\n"
-        if len(msg) > 1800:
+        line = f"{i}. **{article['title']}** {article['type']}\n🔗 [기사보기](<{article['link']}>)\n\n"
+        if len(message + line) < 1900:
+            message += line
+        else:
             break
     
-    msg += "────────────"
+    message += "────────────"
     
+    # 전송
     try:
-        response = requests.post(DISCORD_WEBHOOK_URL, json={"content": msg}, timeout=10)
-        print(f"✅ 전송: Status {response.status_code}")
+        resp = requests.post(DISCORD_WEBHOOK_URL, json={"content": message}, timeout=10)
+        print(f"✅ 전송완료: Status={resp.status_code}")
     except Exception as e:
         print(f"❌ 전송실패: {e}")
 
-# 실행
-print(f"🚀 거시경제 봇 {datetime.now().strftime('%Y-%m-%d %H:%M:%S KST')}")
-global_news = fetch_macro_news()
-domestic_macro = fetch_domestic_macro_news()
+# ===== 메인 실행 =====
+print("📡 1. 글로벌 거시경제 수집")
+global_news = fetch_news("뉴욕증시+OR+국제유가+OR+환율+OR+연준+OR+금리+OR+CPI+OR+도트플롯", "🌍 글로벌", 120)
 
-global_final = simple_filter(global_news, 12)
-domestic_final = simple_filter(domestic_macro, 8)
+print("📡 2. 국내 거시경제 수집") 
+domestic_news = fetch_news("한국은행+OR+코스피+OR+코스닥+OR+원화+OR+환율+OR+소비자물가+OR+무역수지+OR+국고채", "📈 국내거시", 120)
+
+# 필터링 (각각 10개)
+print("🔍 3. 필터링")
+global_final = filter_news(global_news, 10)
+domestic_final = filter_news(domestic_news, 10)
 final_news = global_final + domestic_final
 
-print(f"📊 최종: 글로벌 {len(global_final)} + 국내거시 {len(domestic_final)} = {len(final_news)}개")
-send_to_discord(final_news)
-print("✅ 완료!")
+print(f"📊 4. 최종선정: 글로벌{len(global_final)}+국내{len(domestic_final)}={len(final_news)}개")
+
+# 전송
+send_discord(final_news)
+print("🎉 완료!")
