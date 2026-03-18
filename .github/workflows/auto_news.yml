@@ -22,5 +22,6 @@ jobs:
     - name: Run news bot
       env:
         DISCORD_WEBHOOK_1: ${{ secrets.DISCORD_WEBHOOK_1 }}
+        DISCORD_WEBHOOK_2: ${{ secrets.DISCORD_WEBHOOK_2 }}
         FORCE_RUN: "true"
       run: python main.py
