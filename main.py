@@ -1,126 +1,161 @@
 import os
 import requests
 import re
+import sys
 from datetime import datetime, timedelta, timezone
 
-KST = timezone(timedelta(hours=9))
+# 오류 방지를 위한 안전장치
+try:
+    KST = timezone(timedelta(hours=9))
+except:
+    from datetime import timezone
+    KST = timezone(timedelta(hours=9))
 
-DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_1")  # 단일 변수로 변경
+# 환경변수 안전 확인
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_1")
+print(f"DISCORD_WEBHOOK_1 설정됨: {'O' if DISCORD_WEBHOOK_URL else 'X'}")
+
+def safe_request(url, timeout=15):
+    """안전한 HTTP 요청"""
+    try:
+        response = requests.get(url, timeout=timeout)
+        response.raise_for_status()
+        return response.text
+    except Exception as e:
+        print(f"HTTP 요청 실패 {url}: {e}")
+        return None
 
 def fetch_news(mode):
+    """뉴스 수집"""
+    print(f"수집 중: {mode} 모드")
+    
     if mode == "MORNING":
         query = "뉴욕증시+OR+국제유가+OR+환율+OR+미국+CPI+OR+연준+금리"
-        title_prefix = f"🌍 **[{datetime.now(KST).strftime('%m/%d')}] 글로벌 매크로 시그널 (오전)**"
     else:
         query = "공시+OR+수주+OR+분기실적+OR+장마감+OR+특징주+OR+공급계약+체결"
-        title_prefix = f"📊 **[{datetime.now(KST).strftime('%m/%d')}] 국내 시장 핵심 이슈 (오후)**"
-        
+    
     rss_url = f"https://news.google.com/rss/search?q={query}&hl=ko&gl=KR&ceid=KR:ko"
     
-    try:
-        response = requests.get(rss_url, timeout=15)
-        xml_text = response.text
-        items = re.findall(r'<item>(.*?)</item>', xml_text, re.DOTALL)
-        
-        collected_news = []
-        for item in items:
-            title_match = re.search(r'<title>(.*?)</title>', item)
-            link_match = re.search(r'<link>(.*?)</link>', item)
-            
-            if title_match and link_match:
-                title = title_match.group(1).replace("<![CDATA[", "").replace("]]>", "").split(" - ")[0]
-                link = link_match.group(1)
-                collected_news.append({"title": title, "link": link})
-            
-            if len(collected_news) >= 300: break 
-            
-        return collected_news, title_prefix
-    except Exception as e:
-        print(f"뉴스 수집 중 오류: {e}")
+    xml_text = safe_request(rss_url)
+    if not xml_text:
         return [], ""
+    
+    items = re.findall(r'<item>(.*?)</item>', xml_text, re.DOTALL)
+    print(f"RSS 아이템 수: {len(items)}")
+    
+    collected_news = []
+    for item in items[:50]:  # 300 → 50으로 제한
+        title_match = re.search(r'<title>(.*?)</title>', item, re.DOTALL)
+        link_match = re.search(r'<link>(.*?)</link>', item)
+        
+        if title_match and link_match:
+            title = (title_match.group(1)
+                    .replace("<![CDATA[", "")
+                    .replace("]]>", "")
+                    .split(" - ")[0]
+                    .strip())
+            link = link_match.group(1).strip()
+            
+            if title and link:
+                collected_news.append({"title": title, "link": link})
+    
+    title_prefix = f"**[{datetime.now(KST).strftime('%m/%d')}] {'글로벌' if mode=='MORNING' else '국내'} 뉴스**"
+    return collected_news, title_prefix
 
-def get_core_keywords(text):
-    words = re.findall(r'[가-힣a-zA-Z0-9]{2,}', text)
-    stop_words = ['오늘', '내일', '뉴스', '기사', '게시판', '분석', '이유', '속보']
-    return set([w for w in words if w not in stop_words])
-
-def is_duplicate_issue(new_title, seen_keyword_sets):
-    new_keywords = get_core_keywords(new_title)
-    if not new_keywords: return True
-    for existing_keywords in seen_keyword_sets:
-        common = new_keywords.intersection(existing_keywords)
-        if len(common) >= 3 or (len(new_keywords) <= 4 and len(common) >= 2):
-            return True
-    return False
-
-def filter_signals(news_list):
+def filter_signals(news_list, max_count=10):
+    """뉴스 필터링"""
+    if not news_list:
+        return []
+    
     noise_words = ["?", "카더라", "일까", "조짐", "추측", "포착", "전망은", "특징주"]
     signal_words = ["발표", "확정", "지표", "미국", "국제", "달러", "금리", "상승", "하락", 
                     "공시", "체결", "실적", "종가", "공급", "계약", "특징주", "상한가"]
+    
     filtered = []
-    seen_keyword_sets = []
     for item in news_list:
         title = item['title']
+        
+        # 노이즈 확인
         has_noise = any(word in title for word in noise_words)
+        # 시그널 확인
         has_signal = any(word in title for word in signal_words)
-        if has_signal and not has_noise and not is_duplicate_issue(title, seen_keyword_sets):
+        
+        if has_signal and not has_noise:
             filtered.append(item)
-            seen_keyword_sets.append(get_core_keywords(title))
-        if len(filtered) >= 20: break
+            if len(filtered) >= max_count:
+                break
+    
+    print(f"필터링 결과: {len(filtered)}개 뉴스")
     return filtered
 
 def send_to_discord(articles, title_prefix):
+    """디스코드 전송"""
     if not articles:
         print("전송할 뉴스가 없습니다.")
-        return
-
-    # 🔍 웹훅 URL 안전성 검사
+        return True
+    
     if not DISCORD_WEBHOOK_URL:
-        print("❌ DISCORD_WEBHOOK_1 환경변수가 설정되지 않았습니다!")
-        return
+        print("❌ DISCORD_WEBHOOK_1이 설정되지 않았습니다!")
+        return False
 
-    messages = []
-    current_message = f"{title_prefix}\n\n"
-    
+    message = f"{title_prefix}\n\n"
     for i, article in enumerate(articles, 1):
-        line = f"{i}. **{article['title']}**\n🔗 {article['link']}\n\n"
-        if len(current_message + line) > 1900:
-            messages.append(current_message)
-            current_message = f"{i}. **{article['title']}**\n🔗 {article['link']}\n\n"
-        else:
-            current_message += line
-    
-    messages.append(current_message + "-------------")
+        message += f"{i}. **{article['title']}**\n🔗 {article['link']}\n\n"
+    message += "-------------"
 
-    # 안전한 웹훅 전송
     try:
-        for i, msg in enumerate(messages, 1):
-            response = requests.post(DISCORD_WEBHOOK_URL, json={"content": msg}, timeout=10)
-            print(f"메시지 {i} 전송: {response.status_code}")
-            if response.status_code not in [200, 204]:
-                print(f"❌ 웹훅 오류: {response.text}")
-                return
-        print("✅ 모든 메시지 전송 성공!")
+        response = requests.post(
+            DISCORD_WEBHOOK_URL, 
+            json={"content": message[:2000]},  # Discord 제한
+            timeout=10
+        )
+        print(f"웹훅 응답: {response.status_code}")
+        
+        if response.status_code in [200, 204]:
+            print("✅ 디스코드 전송 성공!")
+            return True
+        else:
+            print(f"❌ 웹훅 실패: {response.text}")
+            return False
+            
     except Exception as e:
-        print(f"❌ 웹훅 전송 실패: {e}")
+        print(f"❌ 웹훅 전송 예외: {e}")
+        return False
 
-# --- 실행 구간 (테스트 + 실제 모두 동작) ---
-now_kst = datetime.now(KST)
-current_hour = now_kst.hour
+# === 메인 실행 ===
+def main():
+    print("=== 뉴스 봇 시작 ===")
+    
+    try:
+        now_kst = datetime.now(KST)
+        print(f"현재 시간: {now_kst.strftime('%Y-%m-%d %H:%M:%S KST')}")
+        
+        # 뉴스 수집
+        world_news, _ = fetch_news("MORNING")
+        domestic_news, _ = fetch_news("AFTERNOON")
+        
+        # 필터링
+        world_filtered = filter_signals(world_news, 10)
+        domestic_filtered = filter_signals(domestic_news, 10)
+        combined = world_filtered + domestic_filtered
+        
+        if not combined:
+            print("필터링된 뉴스가 없습니다.")
+            return
+        
+        # 전송
+        prefix = f"📰 **[{now_kst.strftime('%m/%d %H시')}] 세계+국내 Top{len(combined)}**"
+        success = send_to_discord(combined, prefix)
+        
+        if success:
+            print("🎉 전체 프로세스 성공!")
+        else:
+            print("❌ 디스코드 전송 실패")
+            sys.exit(1)
+            
+    except Exception as e:
+        print(f"❌ 치명적 오류: {e}")
+        sys.exit(1)
 
-print(f"[{now_kst.strftime('%Y-%m-%d %H:%M:%S')}] 실행 시작 (KST)...")
-print(f"DISCORD_WEBHOOK_1 설정됨: {'O' if DISCORD_WEBHOOK_URL else 'X'}")
-
-# 테스트용 + 실제 운영 모두 동작
-if current_hour == 7 or True:  # True로 설정하여 언제나 실행 (테스트 후 False로 변경)
-    print(f"[{now_kst.strftime('%Y-%m-%d %H:%M:%S')}] 뉴스 수집 중...")
-    
-    world_news, _ = fetch_news("MORNING")
-    domestic_news, _ = fetch_news("AFTERNOON")
-    
-    combined = filter_signals(world_news)[:10] + filter_signals(domestic_news)[:10]
-    combined_prefix = f"📰 **[{now_kst.strftime('%m/%d %H시')}] 세계+국내 매크로 Top20**"
-    
-    send_to_discord(combined, combined_prefix)
-else:
-    print(f"[{now_kst.strftime('%Y-%m-%d %H:%M')}] 오전 7시 외 실행 스킵")
+if __name__ == "__main__":
+    main()
