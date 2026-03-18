@@ -15,7 +15,8 @@ def get_kst_now():
 now_kst = get_kst_now()
 
 DISCORD_WEBHOOK_1 = os.getenv("DISCORD_WEBHOOK_1")
-# DISCORD_WEBHOOK_2 = os.getenv("DISCORD_WEBHOOK_2")  # 완전 비활성화
+# 알림값 출력 제거: 2번 웹훅은 아예 사용하지 않음
+# DISCORD_WEBHOOK_2 = os.getenv("DISCORD_WEBHOOK_2")
 
 
 def fetch_news(mode, limit=15):
@@ -170,15 +171,16 @@ def send_to_discord(articles, title_prefix, webhook_url=None):
     else:
         if DISCORD_WEBHOOK_1:
             targets.append(DISCORD_WEBHOOK_1)
-        # DISCORD_WEBHOOK_2는 사용하지 않음
+        # 여기서 더 이상 다른 웹훅은 추가하지 않음 (2번 완전 차단)
 
     if not targets:
         print("❌ Discord Webhook URL이 설정되지 않았습니다.")
         return
 
     # 메시지 분할 (Markdown 링크 포함)
-    current_message = f"{title_prefix}\
-\
+    # ※ 여기 줄바꿈 이스케이프는 원본 그대로 유지
+    current_message = f"{title_prefix}\\\
+\\\
 "
     messages = []
 
@@ -187,19 +189,19 @@ def send_to_discord(articles, title_prefix, webhook_url=None):
         link = article.get("link")
 
         if link:
-            line = f"{i}. {title}\
-\
+            line = f"{i}. {title}\\\
+\\\
 "
         else:
-            line = f"{i}. {title}\
-\
+            line = f"{i}. {title}\\\
+\\\
 "
 
         new_msg = current_message + line
         if len(new_msg.encode("utf-8")) > 1800:
             messages.append(current_message)
-            current_message = f"{title_prefix}\
-\
+            current_message = f"{title_prefix}\\\
+\\\
 {line}"
         else:
             current_message = new_msg
