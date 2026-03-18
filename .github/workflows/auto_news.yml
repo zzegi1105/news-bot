@@ -1,34 +1,39 @@
-name: 종합 경제 뉴스 알림 (오전 8시)
+name: 경제 뉴스 알림 (오전 7시)
 
 on:
   schedule:
-    # KST 오전 8시 = UTC 전날 23시 (월~금)
-    - cron: '0 23 * * 1-5'
-  workflow_dispatch:  # 수동 실행 버튼
+    # KST 오전 7시 = UTC 전날 22시 (월~금)
+    - cron: '0 22 * * 1-5'
+  workflow_dispatch:
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # Node.js 24 즉시 사용
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   send-news:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5  # 최신 버전
+      - name: 📥 Checkout
+        uses: actions/checkout@v5
 
-      - name: Set up Python
-        uses: actions/setup-python@v6  # 최신 버전
+      - name: 🔍 파일 확인
+        run: |
+          echo "현재 위치: $(pwd)"
+          echo "파일 목록:"
+          ls -la *.py || echo "news.py 파일이 없습니다!"
+
+      - name: 🐍 Python 설정
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: 📦 의존성 설치
         run: |
           python -m pip install --upgrade pip
           pip install requests
 
-      - name: Run comprehensive economic news
+      - name: 📰 뉴스 전송
         env:
           DISCORD_WEBHOOK_1: ${{ secrets.DISCORD_WEBHOOK_1 }}
-
         run: |
           python news.py
