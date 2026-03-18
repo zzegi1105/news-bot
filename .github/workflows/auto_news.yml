@@ -5,6 +5,9 @@ on:
     # KST 오전 8시 = UTC 전날 23시 (월~금)
     - cron: '0 23 * * 1-5'
   workflow_dispatch:  # 수동 실행 버튼
+  
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # Node.js 24 즉시 사용
 
 jobs:
   send-news:
