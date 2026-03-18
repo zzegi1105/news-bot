@@ -1,37 +1,19 @@
-name: 자동 경제 뉴스 알림 (오전 7시)
-
+name: 거시경제 자동알림 (07:00)
 on:
   schedule:
-    - cron: '0 22 * * 1-5'  # KST 오전 7시 = UTC 22시
+    - cron: '0 22 * * 1-5'  # KST 07:00 UTC 22:00
   workflow_dispatch:
-
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
-  send-news:
+  news:
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 코드 가져오기
-        uses: actions/checkout@v5
-
-      - name: 🔍 파일 확인
-        run: |
-          echo "📁 현재 위치: $(pwd)"
-          echo "📄 main.py 확인:"
-          ls -la main.py || echo "❌ main.py 파일 없음!"
-
-      - name: 🐍 Python 환경 설정
-        uses: actions/setup-python@v6
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
-
-      - name: 📦 라이브러리 설치
-        run: pip install requests
-
-      - name: 📰 뉴스 전송 실행
+      - run: pip install requests
+      - run: python main.py
         env:
           DISCORD_WEBHOOK_1: ${{ secrets.DISCORD_WEBHOOK_1 }}
-        run: |
-          echo "🚀 main.py 실행 중..."
-          python main.py
