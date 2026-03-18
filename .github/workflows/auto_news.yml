@@ -4,28 +4,29 @@ on:
     - cron: '0 22 * * *'  # KST 오전 7시
   workflow_dispatch:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # 1단계
-
 jobs:
   send-news:
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # 2단계 (중요!)
     steps:
     - name: Checkout
+      env:
+        FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       uses: actions/checkout@v5
       
     - name: Setup Python
+      env:
+        FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
         
     - name: Install requests
+      env:
+        FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       run: pip install requests
       
     - name: Send News
       env:
         DISCORD_WEBHOOK_1: ${{ secrets.DISCORD_WEBHOOK_1 }}
-        FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # 3단계 (최종 보험)
+        FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       run: python main.py
