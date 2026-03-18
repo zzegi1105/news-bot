@@ -3,12 +3,9 @@ import requests
 import re
 from datetime import datetime, timedelta, timezone
 
-# 💡 실제 주소 대신 '금고 열쇠'를 꺼내오도록 수정
-DISCORD_WEBHOOK_URLS = [
-    os.getenv("DISCORD_WEBHOOK_1"),
-]
+KST = timezone(timedelta(hours=9))
 
-KST = timezone(timedelta(hours=9))  # 한국시간 기준
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_1")  # 단일 변수로 변경
 
 def fetch_news(mode):
     if mode == "MORNING":
@@ -57,23 +54,19 @@ def is_duplicate_issue(new_title, seen_keyword_sets):
     return False
 
 def filter_signals(news_list):
-    # 🧩 노이즈 제거 단어에 '특징주' 추가
     noise_words = ["?", "카더라", "일까", "조짐", "추측", "포착", "전망은", "특징주"]
-    signal_words = [
-        "발표", "확정", "지표", "미국", "국제", "달러", "금리", "상승", "하락",
-        "공시", "체결", "실적", "종가", "공급", "계약", "특징주", "상한가"
-    ]
+    signal_words = ["발표", "확정", "지표", "미국", "국제", "달러", "금리", "상승", "하락", 
+                    "공시", "체결", "실적", "종가", "공급", "계약", "특징주", "상한가"]
     filtered = []
     seen_keyword_sets = []
     for item in news_list:
         title = item['title']
         has_noise = any(word in title for word in noise_words)
         has_signal = any(word in title for word in signal_words)
-        if has_signal and not is_duplicate_issue(title, seen_keyword_sets):
+        if has_signal and not has_noise and not is_duplicate_issue(title, seen_keyword_sets):
             filtered.append(item)
             seen_keyword_sets.append(get_core_keywords(title))
-        if len(filtered) >= 20:
-            break
+        if len(filtered) >= 20: break
     return filtered
 
 def send_to_discord(articles, title_prefix):
@@ -81,43 +74,53 @@ def send_to_discord(articles, title_prefix):
         print("전송할 뉴스가 없습니다.")
         return
 
+    # 🔍 웹훅 URL 안전성 검사
+    if not DISCORD_WEBHOOK_URL:
+        print("❌ DISCORD_WEBHOOK_1 환경변수가 설정되지 않았습니다!")
+        return
+
     messages = []
     current_message = f"{title_prefix}\n\n"
     
     for i, article in enumerate(articles, 1):
-        # 🔗 미리보기 링크(Preview) 없이 전송 → <> 제거
         line = f"{i}. **{article['title']}**\n🔗 {article['link']}\n\n"
         if len(current_message + line) > 1900:
             messages.append(current_message)
-            current_message = ""
-        current_message += line
+            current_message = f"{i}. **{article['title']}**\n🔗 {article['link']}\n\n"
+        else:
+            current_message += line
     
     messages.append(current_message + "-------------")
 
-    # webhook 1개만 전송
-    webhook_url = DISCORD_WEBHOOK_URLS[0]
+    # 안전한 웹훅 전송
     try:
-        for msg in messages:
-            requests.post(webhook_url, json={"content": msg})
-        print(f"웹후크 전송 성공: {webhook_url[:30]}...")
+        for i, msg in enumerate(messages, 1):
+            response = requests.post(DISCORD_WEBHOOK_URL, json={"content": msg}, timeout=10)
+            print(f"메시지 {i} 전송: {response.status_code}")
+            if response.status_code not in [200, 204]:
+                print(f"❌ 웹훅 오류: {response.text}")
+                return
+        print("✅ 모든 메시지 전송 성공!")
     except Exception as e:
-        print(f"전송 실패: {webhook_url[:30]}... 오류: {e}")
+        print(f"❌ 웹훅 전송 실패: {e}")
 
-# --- 실행 구간 ---
+# --- 실행 구간 (테스트 + 실제 모두 동작) ---
 now_kst = datetime.now(KST)
 current_hour = now_kst.hour
 
-# 오전 7시 기준 알림만 실행
-if current_hour == 7:
-    print(f"[{now_kst.strftime('%Y-%m-%d %H:%M')}] 오전 뉴스 수집 중 (KST)...")
+print(f"[{now_kst.strftime('%Y-%m-%d %H:%M:%S')}] 실행 시작 (KST)...")
+print(f"DISCORD_WEBHOOK_1 설정됨: {'O' if DISCORD_WEBHOOK_URL else 'X'}")
 
-    # 해외 10개 + 국내 10개
-    world_news, world_prefix = fetch_news("MORNING")
-    domestic_news, domestic_prefix = fetch_news("AFTERNOON")
-
+# 테스트용 + 실제 운영 모두 동작
+if current_hour == 7 or True:  # True로 설정하여 언제나 실행 (테스트 후 False로 변경)
+    print(f"[{now_kst.strftime('%Y-%m-%d %H:%M:%S')}] 뉴스 수집 중...")
+    
+    world_news, _ = fetch_news("MORNING")
+    domestic_news, _ = fetch_news("AFTERNOON")
+    
     combined = filter_signals(world_news)[:10] + filter_signals(domestic_news)[:10]
-    combined_prefix = f"📰 **[{now_kst.strftime('%m/%d')}] 세계 + 국내 매크로 주요 이슈 (오전 7시)**"
+    combined_prefix = f"📰 **[{now_kst.strftime('%m/%d %H시')}] 세계+국내 매크로 Top20**"
     
     send_to_discord(combined, combined_prefix)
 else:
-    print(f"[{now_kst.strftime('%Y-%m-%d %H:%M')}] 현재는 오전 7시가 아니므로 실행되지 않습니다.")
+    print(f"[{now_kst.strftime('%Y-%m-%d %H:%M')}] 오전 7시 외 실행 스킵")
