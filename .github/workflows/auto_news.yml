@@ -1,4 +1,4 @@
-name: 글로벌 매크로 뉴스 알림 (오전 8시)
+name: 종합 경제 뉴스 알림 (오전 8시)
 
 on:
   schedule:
@@ -23,9 +23,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests
 
-      - name: Run morning macro news
+      - name: Run comprehensive economic news
         env:
           DISCORD_WEBHOOK_1: ${{ secrets.DISCORD_WEBHOOK_1 }}
-          DISCORD_WEBHOOK_2: ${{ secrets.DISCORD_WEBHOOK_2 }}
         run: |
           python news.py
