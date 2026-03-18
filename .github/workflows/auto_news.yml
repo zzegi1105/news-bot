@@ -1,19 +1,21 @@
-name: 거시경제 자동알림 (07:00)
+# auto_news.yml 예시 (올바른 설정)
+name: Auto News
 on:
   schedule:
-    - cron: '0 22 * * 1-5'  # KST 07:00 UTC 22:00
-  workflow_dispatch:
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    # 매일 오전 7시 KST (UTC 22:00)
+    - cron: '0 22 * * *'
+  workflow_dispatch: # 수동 실행 버튼
+
 jobs:
-  news:
+  send-news:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-      - run: pip install requests
-      - run: python main.py
-        env:
-          DISCORD_WEBHOOK_1: ${{ secrets.DISCORD_WEBHOOK_1 }}
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    - name: Send News
+      env:
+        DISCORD_WEBHOOK_1: ${{ secrets.DISCORD_WEBHOOK_1 }}
+      run: python main.py
