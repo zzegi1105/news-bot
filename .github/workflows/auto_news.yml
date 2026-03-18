@@ -29,6 +29,6 @@ jobs:
       - name: Run comprehensive economic news
         env:
           DISCORD_WEBHOOK_1: ${{ secrets.DISCORD_WEBHOOK_1 }}
-          DISCORD_WEBHOOK_2: ${{ secrets.DISCORD_WEBHOOK_2 }}
+
         run: |
           python news.py
