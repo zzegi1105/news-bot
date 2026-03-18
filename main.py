@@ -212,4 +212,55 @@ def send_to_discord(articles, title_prefix, webhook_url=None):
                     timeout=10,
                     headers={"User-Agent": "NewsBot/1.0"},
                 )
-                if
+                if response.status_code in [200, 204]:
+                    success_count += 1
+                else:
+                    print(f"⚠️ HTTP {response.status_code}: {response.text[:100]}")
+            print(f"✅ Discord 전송 완료 ({success_count}/{len(messages)}): {webhook_url[:30]}...")
+        except Exception as e:
+            print(f"❌ 전송 실패: {webhook_url[:30]}... {str(e)[:100]}")
+
+
+def main():
+    """메인 실행 로직"""
+    print(f"🚀 [{now_kst.strftime('%Y-%m-%d %H:%M:%S KST')}] 뉴스봇 시작")
+    current_hour = now_kst.hour
+
+    # 1. 오전 7시 정기알림 (WEBHOOK_1만)
+    if current_hour == 7:
+        print("🕐 [정기알림] 오전 7시 KST - WEBHOOK_1 전용")
+        world_news, world_prefix = fetch_news("WORLD")
+        domestic_news, domestic_prefix = fetch_news("DOMESTIC")
+
+        world_filtered = filter_news(world_news)
+        domestic_filtered = filter_news(domestic_news)
+
+        print(f"🌍 세계뉴스: {len(world_filtered)}개, 🇰🇷 국내뉴스: {len(domestic_filtered)}개")
+
+        if DISCORD_WEBHOOK_1:
+            send_to_discord(world_filtered, world_prefix, DISCORD_WEBHOOK_1)
+        else:
+            print("❌ DISCORD_WEBHOOK_1 환경변수 누락")
+        return
+
+    # 2. GitHub Actions 수동 실행
+    if os.getenv("FORCE_RUN") == "true" or os.getenv("GITHUB_RUN_ID"):
+        print("🔥 [GitHub Actions] 수동실행 모드")
+        world_news, world_prefix = fetch_news("WORLD")
+        domestic_news, domestic_prefix = fetch_news("DOMESTIC")
+
+        world_filtered = filter_news(world_news)
+        domestic_filtered = filter_news(domestic_news)
+
+        print(f"🌍 세계뉴스: {len(world_filtered)}개, 🇰🇷 국내뉴스: {len(domestic_filtered)}개")
+
+        send_to_discord(world_filtered, world_prefix)
+        send_to_discord(domestic_filtered, domestic_prefix)
+        return
+
+    print(f"⏭️ 실행시간 아님 ({current_hour}시) - 매일 07:00에 자동실행")
+    return
+
+
+if __name__ == "__main__":
+    main()
