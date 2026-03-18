@@ -1,102 +1,123 @@
 import os
 import requests
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
-# 설정 확인
-DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_1")
-print(f"🚀 뉴스봇 시작: {datetime.now().strftime('%Y-%m-%d %H:%M:%S KST')}")
-print(f"🔗 웹후크: {'✅' if DISCORD_WEBHOOK_URL else '❌'}")
+# 💡 실제 주소 대신 '금고 열쇠'를 꺼내오도록 수정
+DISCORD_WEBHOOK_URLS = [
+    os.getenv("DISCORD_WEBHOOK_1"),
+]
 
-def fetch_news(query, news_type, max_items=100):
-    """뉴스 RSS 수집"""
+KST = timezone(timedelta(hours=9))  # 한국시간 기준
+
+def fetch_news(mode):
+    if mode == "MORNING":
+        query = "뉴욕증시+OR+국제유가+OR+환율+OR+미국+CPI+OR+연준+금리"
+        title_prefix = f"🌍 **[{datetime.now(KST).strftime('%m/%d')}] 글로벌 매크로 시그널 (오전)**"
+    else:
+        query = "공시+OR+수주+OR+분기실적+OR+장마감+OR+특징주+OR+공급계약+체결"
+        title_prefix = f"📊 **[{datetime.now(KST).strftime('%m/%d')}] 국내 시장 핵심 이슈 (오후)**"
+        
     rss_url = f"https://news.google.com/rss/search?q={query}&hl=ko&gl=KR&ceid=KR:ko"
-    try:
-        resp = requests.get(rss_url, timeout=15)
-        items = re.findall(r'<item>(.*?)</item>', resp.text, re.DOTALL)
-        news = []
-        for item in items[:max_items]:
-            title_match = re.search(r'<title>(.*?)</title>', item, re.DOTALL)
-            link_match = re.search(r'<link>(.*?)</link>', item)
-            if title_match and link_match:
-                title = title_match.group(1).replace("<![CDATA[", "").replace("]]>", "").split(" - ")[0].strip()
-                link = link_match.group(1)
-                news.append({"title": title, "link": link, "type": news_type})
-        print(f"✅ {news_type}: {len(news)}개 수집")
-        return news
-    except Exception as e:
-        print(f"❌ {news_type} 오류: {e}")
-        return []
-
-def filter_news(news_list, max_count=10):
-    """중복/노이즈 제거 + 상위 N개 선정"""
-    noise_words = ["카더라", "일까", "조짐", "추측", "전망", "?", "특징주"]
-    filtered = []
-    seen_keywords = []
     
+    try:
+        response = requests.get(rss_url, timeout=15)
+        xml_text = response.text
+        items = re.findall(r'<item>(.*?)</item>', xml_text, re.DOTALL)
+        
+        collected_news = []
+        for item in items:
+            title_match = re.search(r'<title>(.*?)</title>', item)
+            link_match = re.search(r'<link>(.*?)</link>', item)
+            
+            if title_match and link_match:
+                title = title_match.group(1).replace("<![CDATA[", "").replace("]]>", "").split(" - ")[0]
+                link = link_match.group(1)
+                collected_news.append({"title": title, "link": link})
+            
+            if len(collected_news) >= 300: break 
+            
+        return collected_news, title_prefix
+    except Exception as e:
+        print(f"뉴스 수집 중 오류: {e}")
+        return [], ""
+
+def get_core_keywords(text):
+    words = re.findall(r'[가-힣a-zA-Z0-9]{2,}', text)
+    stop_words = ['오늘', '내일', '뉴스', '기사', '게시판', '분석', '이유', '속보']
+    return set([w for w in words if w not in stop_words])
+
+def is_duplicate_issue(new_title, seen_keyword_sets):
+    new_keywords = get_core_keywords(new_title)
+    if not new_keywords: return True
+    for existing_keywords in seen_keyword_sets:
+        common = new_keywords.intersection(existing_keywords)
+        if len(common) >= 3 or (len(new_keywords) <= 4 and len(common) >= 2):
+            return True
+    return False
+
+def filter_signals(news_list):
+    # 🧩 노이즈 제거 단어에 '특징주' 추가
+    noise_words = ["?", "카더라", "일까", "조짐", "추측", "포착", "전망은", "특징주"]
+    signal_words = [
+        "발표", "확정", "지표", "미국", "국제", "달러", "금리", "상승", "하락",
+        "공시", "체결", "실적", "종가", "공급", "계약", "특징주", "상한가"
+    ]
+    filtered = []
+    seen_keyword_sets = []
     for item in news_list:
         title = item['title']
-        # 노이즈 제거
-        if any(noise in title for noise in noise_words):
-            continue
-        # 중복 제거 (키워드 3개 이상 겹치면 제외)
-        keywords = re.findall(r'[가-힣a-zA-Z0-9]{2,}', title)
-        keywords = [w for w in keywords if w not in ['오늘', '내일', '뉴스', '속보']]
-        
-        is_duplicate = False
-        for existing in seen_keywords:
-            common = set(keywords) & set(existing)
-            if len(common) >= 3:
-                is_duplicate = True
-                break
-        if not is_duplicate and len(filtered) < max_count:
+        has_noise = any(word in title for word in noise_words)
+        has_signal = any(word in title for word in signal_words)
+        if has_signal and not is_duplicate_issue(title, seen_keyword_sets):
             filtered.append(item)
-            seen_keywords.append(keywords)
-    
+            seen_keyword_sets.append(get_core_keywords(title))
+        if len(filtered) >= 20:
+            break
     return filtered
 
-def send_discord(articles):
-    """디스코드 전송"""
-    if not articles or not DISCORD_WEBHOOK_URL:
-        print("❌ 전송 불가: 뉴스없음 또는 웹후크없음")
+def send_to_discord(articles, title_prefix):
+    if not articles:
+        print("전송할 뉴스가 없습니다.")
         return
+
+    messages = []
+    current_message = f"{title_prefix}\n\n"
     
-    # 제목
-    title = f"📰 **[{datetime.now().strftime('%m/%d %H:%M')}] 거시경제 TOP {len(articles)}**"
-    message = f"{title}\n\n"
-    
-    # 뉴스 목록
     for i, article in enumerate(articles, 1):
-        line = f"{i}. **{article['title']}** {article['type']}\n🔗 [기사보기](<{article['link']}>)\n\n"
-        if len(message + line) < 1900:
-            message += line
-        else:
-            break
+        # 🔗 미리보기 링크(Preview) 없이 전송 → <> 제거
+        line = f"{i}. **{article['title']}**\n🔗 {article['link']}\n\n"
+        if len(current_message + line) > 1900:
+            messages.append(current_message)
+            current_message = ""
+        current_message += line
     
-    message += "────────────"
-    
-    # 전송
+    messages.append(current_message + "-------------")
+
+    # webhook 1개만 전송
+    webhook_url = DISCORD_WEBHOOK_URLS[0]
     try:
-        resp = requests.post(DISCORD_WEBHOOK_URL, json={"content": message}, timeout=10)
-        print(f"✅ 전송완료: Status={resp.status_code}")
+        for msg in messages:
+            requests.post(webhook_url, json={"content": msg})
+        print(f"웹후크 전송 성공: {webhook_url[:30]}...")
     except Exception as e:
-        print(f"❌ 전송실패: {e}")
+        print(f"전송 실패: {webhook_url[:30]}... 오류: {e}")
 
-# ===== 메인 실행 =====
-print("📡 1. 글로벌 거시경제 수집")
-global_news = fetch_news("뉴욕증시+OR+국제유가+OR+환율+OR+연준+OR+금리+OR+CPI+OR+도트플롯", "🌍 글로벌", 100)
+# --- 실행 구간 ---
+now_kst = datetime.now(KST)
+current_hour = now_kst.hour
 
-print("📡 2. 국내 거시경제 수집") 
-domestic_news = fetch_news("한국은행+OR+코스피+OR+코스닥+OR+원화+OR+환율+OR+소비자물가+OR+무역수지+OR+국고채", "📈 국내거시", 100)
+# 오전 7시 기준 알림만 실행
+if current_hour == 7:
+    print(f"[{now_kst.strftime('%Y-%m-%d %H:%M')}] 오전 뉴스 수집 중 (KST)...")
 
-# 필터링 (각각 10개)
-print("🔍 3. 필터링")
-global_final = filter_news(global_news, 10)
-domestic_final = filter_news(domestic_news, 10)
-final_news = global_final + domestic_final
+    # 해외 10개 + 국내 10개
+    world_news, world_prefix = fetch_news("MORNING")
+    domestic_news, domestic_prefix = fetch_news("AFTERNOON")
 
-print(f"📊 4. 최종선정: 글로벌{len(global_final)}+국내{len(domestic_final)}={len(final_news)}개")
-
-# 전송
-send_discord(final_news)
-print("🎉 완료!")
+    combined = filter_signals(world_news)[:10] + filter_signals(domestic_news)[:10]
+    combined_prefix = f"📰 **[{now_kst.strftime('%m/%d')}] 세계 + 국내 매크로 주요 이슈 (오전 7시)**"
+    
+    send_to_discord(combined, combined_prefix)
+else:
+    print(f"[{now_kst.strftime('%Y-%m-%d %H:%M')}] 현재는 오전 7시가 아니므로 실행되지 않습니다.")
