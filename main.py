@@ -11,11 +11,11 @@ def get_kst_now():
 
 now_kst = get_kst_now()
 
-# 2. 환경 변수 (WEBHOOK_2 관련 변수 완전 삭제)
+# 2. 환경 변수 (WEBHOOK_2 관련 완전 제거)
 DISCORD_WEBHOOK_1 = os.getenv("DISCORD_WEBHOOK_1")
 
 def fetch_news(mode, limit=15):
-    """뉴스 수집 로직 (기존과 동일)"""
+    """뉴스 수집 및 링크 추출 로직"""
     if mode == "WORLD":
         query = "세계+경제+OR+미국+CPI+OR+연준+금리+OR+뉴욕증시+OR+국제유가+OR+환율"
         title_prefix = f"🌍 **[{now_kst.strftime('%m/%d %H:%M')}] 세계거시경제 TOP 10**"
@@ -41,8 +41,13 @@ def fetch_news(mode, limit=15):
             if title_match:
                 title = title_match.group(1).replace("<![CDATA[", "").replace("]]>", "").split(" - ")[0].strip()
                 link = link_match.group(1) if link_match else None
+                
+                # 링크가 존재할 경우에만 수집
                 if len(title) > 3:
-                    collected_news.append({"title": title, "link": link})
+                    collected_news.append({
+                        "title": title,
+                        "link": link
+                    })
             if len(collected_news) >= limit: break
         return collected_news, title_prefix
     except Exception as e:
@@ -55,7 +60,6 @@ def filter_news(news_list):
     signal_words = ["발표", "확정", "지표", "미국", "국제", "금리", "상승", "하락", "실적"]
     
     filtered = []
-    seen_keywords = []
     for item in news_list:
         title = item["title"]
         if len(title) < 10: continue
@@ -65,12 +69,11 @@ def filter_news(news_list):
     return filtered
 
 def send_to_discord(articles, title_prefix, webhook_url=None):
-    """[핵심 수정] 기존 알림 성공 로직으로 복구"""
+    """[링크 복구] Markdown 형식을 사용하여 제목에 링크 연결"""
     if not articles:
         print("📭 전송할 뉴스가 없습니다.")
         return
 
-    # 전송 대상 리스트화 (기존 성공 로직 구조)
     targets = []
     if webhook_url and webhook_url.strip():
         targets = [webhook_url]
@@ -81,20 +84,30 @@ def send_to_discord(articles, title_prefix, webhook_url=None):
         print("❌ Discord Webhook URL이 설정되지 않았습니다.")
         return
 
-    # 메시지 분할 생성
+    # 메시지 생성 (Markdown 링크 적용)
     current_message = f"{title_prefix}\n\n"
     messages = []
+    
     for i, article in enumerate(articles, 1):
-        line = f"{i}. {article['title']}\n\n"
+        title = article["title"]
+        link = article.get("link")
+
+        # 링크가 있으면 [제목](링크) 형식으로 생성, 없으면 제목만 생성
+        if link:
+            line = f"{i}. [{title}]({link})\n\n"
+        else:
+            line = f"{i}. {title}\n\n"
+
         if len((current_message + line).encode("utf-8")) > 1800:
             messages.append(current_message)
             current_message = f"{title_prefix}\n\n{line}"
         else:
             current_message += line
+
     if current_message.strip():
         messages.append(current_message)
 
-    # 루프를 통한 실제 전송 (기존 성공 방식)
+    # 전송 루프
     for target in targets:
         try:
             for msg in messages:
@@ -117,7 +130,7 @@ def main():
             send_to_discord(filter_news(dom_news), dom_pref, DISCORD_WEBHOOK_1)
         return
 
-    # 2. 수동 실행 (GitHub Actions용)
+    # 2. 수동 실행 및 GitHub Actions 대응
     if os.getenv("FORCE_RUN") == "true" or os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("GITHUB_RUN_ID"):
         world_news, world_pref = fetch_news("WORLD")
         dom_news, dom_pref = fetch_news("DOMESTIC")
