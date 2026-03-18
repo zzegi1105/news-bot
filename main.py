@@ -84,10 +84,10 @@ def send_discord(articles):
 
 # ===== 메인 실행 =====
 print("📡 1. 글로벌 거시경제 수집")
-global_news = fetch_news("뉴욕증시+OR+국제유가+OR+환율+OR+연준+OR+금리+OR+CPI+OR+도트플롯", "🌍 글로벌", 120)
+global_news = fetch_news("뉴욕증시+OR+국제유가+OR+환율+OR+연준+OR+금리+OR+CPI+OR+도트플롯", "🌍 글로벌", 100)
 
 print("📡 2. 국내 거시경제 수집") 
-domestic_news = fetch_news("한국은행+OR+코스피+OR+코스닥+OR+원화+OR+환율+OR+소비자물가+OR+무역수지+OR+국고채", "📈 국내거시", 120)
+domestic_news = fetch_news("한국은행+OR+코스피+OR+코스닥+OR+원화+OR+환율+OR+소비자물가+OR+무역수지+OR+국고채", "📈 국내거시", 100)
 
 # 필터링 (각각 10개)
 print("🔍 3. 필터링")
